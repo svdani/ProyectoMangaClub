@@ -32,7 +32,7 @@ export default function PerfilScreen() {
     try {
       const token = await AsyncStorage.getItem("token");
 
-      const response = await fetch("http://192.168.1.133:3000/usuarios/me", {
+      const response = await fetch(process.env.EXPO_PUBLIC_API_URL+"/usuarios/me", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -60,7 +60,7 @@ export default function PerfilScreen() {
 
       const token = await AsyncStorage.getItem("token");
 
-      const response = await fetch("http://192.168.1.133:3000/usuarios/me", {
+      const response = await fetch(process.env.EXPO_PUBLIC_API_URL+"/usuarios/me", {
         method: "PUT",
 
         headers: {

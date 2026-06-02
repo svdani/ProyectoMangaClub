@@ -33,7 +33,7 @@ export default function EdicionScreen() {
       const token = await AsyncStorage.getItem("token");
 
       const response = await fetch(
-        `http://192.168.1.133:3000/coleccion/huecos/${id}`,
+        process.env.EXPO_PUBLIC_API_URL+`/coleccion/huecos/${id}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -76,7 +76,7 @@ export default function EdicionScreen() {
       const token = await AsyncStorage.getItem("token");
 
       for (const volumen of volumenes) {
-        await fetch("http://192.168.1.133:3000/coleccion", {
+        await fetch(process.env.EXPO_PUBLIC_API_URL+"/coleccion", {
           method: "POST",
 
           headers: {
@@ -104,7 +104,7 @@ export default function EdicionScreen() {
       const token = await AsyncStorage.getItem("token");
 
       if (!nuevoEstado) {
-        await fetch(`http://192.168.1.133:3000/coleccion/${volumen.id}`, {
+        await fetch(process.env.EXPO_PUBLIC_API_URL+`/coleccion/${volumen.id}`, {
           method: "DELETE",
 
           headers: {
@@ -112,7 +112,7 @@ export default function EdicionScreen() {
           },
         });
       } else {
-        await fetch("http://192.168.1.133:3000/coleccion", {
+        await fetch(process.env.EXPO_PUBLIC_API_URL+"/coleccion", {
           method: "POST",
 
           headers: {
@@ -209,17 +209,19 @@ export default function EdicionScreen() {
             {" tomos"}
           </Text>
 
-          <Text style={styles.status}>
-            {info?.estado === "FINISHED"
-              ? "Terminado"
-              : info?.estado === "RELEASING" || info?.estado === "ongoing"
-                ? "En publicación"
-                : info?.estado === "HIATUS"
-                  ? "Hiatus"
-                  : info?.estado === "CANCELLED"
-                    ? "Cancelado"
-                    : info?.estado}
-          </Text>
+          {info?.estado ? (
+            <Text style={styles.status}>
+              {info.estado === "FINISHED" || info.estado === "completed"
+                ? "Terminado"
+                : info.estado === "RELEASING" || info.estado === "ongoing"
+                  ? "En publicación"
+                  : info.estado === "HIATUS" || info.estado === "hiatus"
+                    ? "Hiatus"
+                    : info.estado === "CANCELLED" || info.estado === "cancelled"
+                      ? "Cancelado"
+                      : info.estado}
+            </Text>
+          ) : null}
 
           <Text style={styles.percent}>
             {porcentaje}

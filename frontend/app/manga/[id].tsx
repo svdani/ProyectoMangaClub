@@ -42,7 +42,7 @@ export default function MangaDetailScreen() {
 
   async function importarObra() {
     try {
-      const response = await fetch("http://192.168.1.133:3000/obras/importar", {
+      const response = await fetch(process.env.EXPO_PUBLIC_API_URL+"/obras/importar", {
         method: "POST",
 
         headers: {

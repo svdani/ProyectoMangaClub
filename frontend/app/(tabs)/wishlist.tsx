@@ -29,7 +29,7 @@ export default function WishlistScreen() {
       const token = await AsyncStorage.getItem("token");
 
       const response = await fetch(
-        "http://192.168.1.133:3000/coleccion/wishlist",
+        process.env.EXPO_PUBLIC_API_URL+"/coleccion/wishlist",
         {
           headers: {
             Authorization: `Bearer ${token}`,

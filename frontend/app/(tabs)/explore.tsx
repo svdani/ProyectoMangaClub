@@ -12,148 +12,51 @@ import {
   View,
 } from "react-native";
 
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
 export default function ExploreScreen() {
   const [busqueda, setBusqueda] = useState("");
+  const [obras, setObras] = useState<any[]>([]);
 
-  const [mangas, setMangas] = useState<any[]>([]);
-
-  async function buscarMangas(texto: string) {
+  async function buscarObras(texto: string) {
     setBusqueda(texto);
 
     if (!texto) {
-      setMangas([]);
-
+      setObras([]);
       return;
     }
 
     try {
-      const response = await fetch(
-        `https://api.mangadex.org/manga?title=${texto}&limit=10&includes[]=cover_art`,
-      );
-
+      const response = await fetch(`${API_URL}/obras/buscar?q=${encodeURIComponent(texto)}`);
       const data = await response.json();
-
-      const mangasConTomos = await Promise.all(
-        data.data.map(async (manga: any) => {
-          let totalTomos = 0;
-
-          try {
-            const coversResponse = await fetch(
-              `https://api.mangadex.org/cover?manga[]=${manga.id}&limit=100`,
-            );
-
-            const coversData = await coversResponse.json();
-
-            const covers = coversData.data || [];
-
-            // obtener números únicos reales
-
-            const numerosUnicos = Array.from(
-              new Set(
-                covers
-                  .map((cover: any) => {
-                    const volumenRaw = cover.attributes?.volume;
-
-                    if (!volumenRaw) return null;
-
-                    const texto = volumenRaw.toString();
-
-                    // ignorar variantes
-                    // tipo 1.1
-
-                    if (texto.includes(".")) {
-                      return null;
-                    }
-
-                    const numero = parseInt(texto);
-
-                    return isNaN(numero) ? null : numero;
-                  })
-                  .filter((n): n is number => n !== null),
-              ),
-            );
-
-            totalTomos = numerosUnicos.length;
-          } catch {
-            totalTomos = 0;
-          }
-
-          return {
-            ...manga,
-
-            totalTomos,
-          };
-        }),
-      );
-
-      setMangas(mangasConTomos);
+      setObras(data);
     } catch (error) {
-      console.log(error);
+      console.log("Error buscando obras:", error);
     }
   }
 
-  function obtenerTitulo(manga: any) {
-    return (
-      manga.attributes.title.en || Object.values(manga.attributes.title)[0]
-    );
+  function obtenerPortada(obra: any): string {
+    return obra.portada_url || "https://picsum.photos/200/300";
   }
 
-  function obtenerCover(manga: any) {
-    const coverRel = manga.relationships.find(
-      (rel: any) => rel.type === "cover_art",
-    );
-
-    if (!coverRel || !coverRel.attributes || !coverRel.attributes.fileName) {
-      return "https://picsum.photos/200/300";
-    }
-
-    const fileName = coverRel.attributes.fileName;
-
-    return `https://uploads.mangadex.org/covers/${manga.id}/${fileName}`;
+  function obtenerTotalTomos(obra: any): number {
+    if (!obra.ediciones || obra.ediciones.length === 0) return 0;
+    return obra.ediciones[0].total_volumenes || 0;
   }
 
-  async function abrirObra(manga: any) {
-    try {
-      let response = await fetch(
-        `http://192.168.1.133:3000/obras/mangadex/${manga.id}`,
-      );
-
-      let obra = null;
-
-      const text = await response.text();
-
-      if (text) {
-        obra = JSON.parse(text);
-      }
-
-      // importar o refrescar
-
-      response = await fetch("http://192.168.1.133:3000/obras/importar", {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          titulo: obtenerTitulo(manga),
-
-          portada_url: obtenerCover(manga),
-
-          mangadex_id: manga.id,
-
-          total_tomos: manga.totalTomos,
-
-          estado: manga.attributes.status,
-        }),
-      });
-
-      obra = await response.json();
-
-      router.push(`/obra/${obra.id}`);
-    } catch (error) {
-      console.log(error);
-    }
+  function obtenerEstadoLabel(estado: string): string {
+    const map: Record<string, string> = {
+      FINISHED: "Terminado",
+      RELEASING: "En publicación",
+      NOT_YET_RELEASED: "No publicado",
+      CANCELLED: "Cancelado",
+      HIATUS: "Hiatus",
+      completed: "Terminado",
+      ongoing: "En publicación",
+      hiatus: "Hiatus",
+      cancelled: "Cancelado",
+    };
+    return map[estado] || estado || "Desconocido";
   }
 
   return (
@@ -165,51 +68,104 @@ export default function ExploreScreen() {
         placeholderTextColor="#888"
         style={styles.input}
         value={busqueda}
-        onChangeText={buscarMangas}
+        onChangeText={buscarObras}
       />
 
       <FlatList
-        data={mangas}
+        data={obras}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => abrirObra(item)}>
+          <Pressable style={styles.card} onPress={() => router.push(`/obra/${item.id}`)}>
             <Image
-              source={{
-                uri: obtenerCover(item),
-              }}
+              source={{ uri: obtenerPortada(item) }}
               style={styles.cover}
             />
 
-            <View
-              style={{
-                flex: 1,
-              }}
-            >
-              <Text style={styles.name}>{obtenerTitulo(item)}</Text>
-
-              <Text style={styles.info}>
-                Estado:{" "}
-                {item.attributes.status === "completed"
-                  ? "Terminado"
-                  : item.attributes.status === "ongoing"
-                    ? "En publicación"
-                    : item.attributes.status === "hiatus"
-                      ? "Hiatus"
-                      : item.attributes.status === "cancelled"
-                        ? "Cancelado"
-                        : item.attributes.status}
-              </Text>
-
-              <Text style={styles.info}>Año: {item.attributes.year}</Text>
-
-              <Text style={styles.info}>Tomos: {item.totalTomos}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{item.titulo_es}</Text>
+              {item.titulo_original ? (
+                <Text style={styles.infoSecondary}>{item.titulo_original}</Text>
+              ) : null}
+              <Text style={styles.info}>Estado: {obtenerEstadoLabel(item.estado)}</Text>
+              <Text style={styles.info}>Tomos: {obtenerTotalTomos(item)}</Text>
             </View>
           </Pressable>
         )}
+        ListEmptyComponent={
+          busqueda.length > 0 ? (
+            <Text style={styles.empty}>Sin resultados en la base de datos</Text>
+          ) : null
+        }
       />
     </View>
   );
 }
+
+// ─── Búsqueda MangaDex (guardada para uso futuro / importar obras nuevas) ───
+//
+// async function buscarEnMangadex(texto: string) {
+//   const response = await fetch(
+//     `https://api.mangadex.org/manga?title=${texto}&limit=10&includes[]=cover_art`
+//   );
+//   const data = await response.json();
+//   const mangasConTomos = await Promise.all(
+//     data.data.map(async (manga: any) => {
+//       let totalTomos = 0;
+//       try {
+//         const coversResponse = await fetch(
+//           `https://api.mangadex.org/cover?manga[]=${manga.id}&limit=100`
+//         );
+//         const coversData = await coversResponse.json();
+//         const covers = coversData.data || [];
+//         const numerosUnicos = Array.from(
+//           new Set(
+//             covers
+//               .map((cover: any) => {
+//                 const volumenRaw = cover.attributes?.volume;
+//                 if (!volumenRaw) return null;
+//                 const texto = volumenRaw.toString();
+//                 if (texto.includes(".")) return null;
+//                 const numero = parseInt(texto);
+//                 return isNaN(numero) ? null : numero;
+//               })
+//               .filter((n): n is number => n !== null)
+//           )
+//         );
+//         totalTomos = numerosUnicos.length;
+//       } catch { totalTomos = 0; }
+//       return { ...manga, totalTomos };
+//     })
+//   );
+//   return mangasConTomos;
+// }
+//
+// async function abrirObraMangadex(manga: any) {
+//   const url = `${API_URL}/obras/mangadex/${manga.id}`;
+//   let response = await fetch(url);
+//   response = await fetch(`${API_URL}/obras/importar`, {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({
+//       titulo: obtenerTituloMangadex(manga),
+//       portada_url: obtenerCoverMangadex(manga),
+//       mangadex_id: manga.id,
+//       total_tomos: manga.totalTomos,
+//       estado: manga.attributes.status,
+//     }),
+//   });
+//   const obra = await response.json();
+//   if (obra?.id) router.push(`/obra/${obra.id}`);
+// }
+//
+// function obtenerTituloMangadex(manga: any) {
+//   return manga.attributes.title.en || Object.values(manga.attributes.title)[0];
+// }
+//
+// function obtenerCoverMangadex(manga: any) {
+//   const coverRel = manga.relationships.find((rel: any) => rel.type === "cover_art");
+//   if (!coverRel?.attributes?.fileName) return "https://picsum.photos/200/300";
+//   return `https://uploads.mangadex.org/covers/${manga.id}/${coverRel.attributes.fileName}`;
+// }
 
 const styles = StyleSheet.create({
   container: {
@@ -256,10 +212,22 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 5,
+    marginBottom: 3,
+  },
+
+  infoSecondary: {
+    color: "#888",
+    fontSize: 13,
+    marginBottom: 3,
   },
 
   info: {
     color: "#aaa",
+  },
+
+  empty: {
+    color: "#555",
+    textAlign: "center",
+    marginTop: 40,
   },
 });

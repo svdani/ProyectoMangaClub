@@ -28,7 +28,9 @@ export default function RegisterScreen() {
         return;
       }
 
-      const response = await fetch("http://192.168.1.133:3000/auth/register", {
+      //const response = await fetch("http://192.168.1.133:3000/auth/register", {
+      const response = await fetch(process.env.EXPO_PUBLIC_API_URL+"/auth/register", {
+
         method: "POST",
 
         headers: {

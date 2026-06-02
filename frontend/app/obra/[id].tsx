@@ -33,7 +33,7 @@ export default function ObraScreen() {
   async function cargarEdiciones() {
     try {
       const response = await fetch(
-        `http://192.168.1.133:3000/obras/${id}/ediciones`,
+        process.env.EXPO_PUBLIC_API_URL+`/obras/${id}/ediciones`,
       );
 
       const data = await response.json();
@@ -43,14 +43,15 @@ export default function ObraScreen() {
       if (data.length > 0) {
         setObra({
           ...data[0],
-
-          estado: data[0]?.estado || "SIN ESTADO",
+          // La portada puede estar en la edición o en la obra padre
+          portada_url: data[0].portada_url || data[0].obra?.portada_url || null,
+          estado: data[0]?.estado ?? null,
         });
 
         const token = await AsyncStorage.getItem("token");
 
         const huecos = await fetch(
-          `http://192.168.1.133:3000/coleccion/huecos/${data[0].id}`,
+          process.env.EXPO_PUBLIC_API_URL+`/coleccion/huecos/${data[0].id}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -109,17 +110,19 @@ export default function ObraScreen() {
 
           <Text style={styles.title}>{obra.nombre_edicion}</Text>
 
-          <Text style={styles.status}>
-            {obra?.estado === "FINISHED"
-              ? "Terminado"
-              : obra?.estado === "RELEASING" || obra?.estado === "ongoing"
-                ? "En publicación"
-                : obra?.estado === "HIATUS"
-                  ? "Hiatus"
-                  : obra?.estado === "CANCELLED"
-                    ? "Cancelado"
-                    : obra?.estado}
-          </Text>
+          {obra?.estado ? (
+            <Text style={styles.status}>
+              {obra.estado === "FINISHED" || obra.estado === "completed"
+                ? "Terminado"
+                : obra.estado === "RELEASING" || obra.estado === "ongoing"
+                  ? "En publicación"
+                  : obra.estado === "HIATUS" || obra.estado === "hiatus"
+                    ? "Hiatus"
+                    : obra.estado === "CANCELLED" || obra.estado === "cancelled"
+                      ? "Cancelado"
+                      : obra.estado}
+            </Text>
+          ) : null}
 
           <Text style={styles.progressText}>
             {poseidos}

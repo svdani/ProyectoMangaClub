@@ -29,7 +29,7 @@ export default function HomeScreen() {
       const token = await AsyncStorage.getItem("token");
 
       const response = await fetch(
-        "http://192.168.1.133:3000/coleccion/biblioteca",
+        process.env.EXPO_PUBLIC_API_URL+"/coleccion/biblioteca",
         {
           headers: {
             Authorization: `Bearer ${token}`,

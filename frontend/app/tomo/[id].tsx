@@ -26,7 +26,7 @@ export default function TomoScreen() {
 
   async function cargarTomo() {
     try {
-      const response = await fetch(`http://192.168.1.133:3000/volumenes/${id}`);
+      const response = await fetch(process.env.EXPO_PUBLIC_API_URL+`/volumenes/${id}`);
 
       const data = await response.json();
       console.log(data);
