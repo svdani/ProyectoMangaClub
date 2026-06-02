@@ -26,6 +26,8 @@ export interface ColeccionDetalle {
   autores: string[];
   editorial?: string;
   portadaUrl?: string;
+  sinopsis?: string;
+  coleccion?: string;       // demografía/colección (ej: "Shonen Manga")
   tomos: TomoScrapeado[];
 }
 
@@ -88,25 +90,68 @@ export class ListadoMangaService {
       let editorial: string | undefined;
       $('a[href*="editorial.php"]').each((_, el) => { editorial = $(el).text().trim(); });
 
+      // Colección / demografía (ej: "Shonen Manga")
+      let coleccion: string | undefined;
+      $('td').each((_, cell) => {
+        const texto = $(cell).text().trim();
+        if (texto === 'Colección' || texto.startsWith('Colección:')) {
+          const siguiente = $(cell).next('td');
+          coleccion = siguiente.length
+            ? siguiente.text().trim()
+            : texto.replace(/^Colección:\s*/i, '').trim() || undefined;
+        }
+      });
+
+      // Sinopsis — buscar el bloque que sigue a un h2/h3 con "Sinopsis"
+      let sinopsis: string | undefined;
+      $('h2, h3, h4, b, strong').each((_, el) => {
+        if (sinopsis) return;
+        const texto = $(el).text().trim().toLowerCase();
+        if (texto.startsWith('sinopsis')) {
+          // El texto de la sinopsis está en el siguiente párrafo o td
+          const siguiente = $(el).next();
+          if (siguiente.length) {
+            const candidate = siguiente.text().trim();
+            if (candidate.length > 20) sinopsis = candidate;
+          }
+          // O dentro del mismo contenedor padre
+          if (!sinopsis) {
+            const padre = $(el).parent();
+            const todoTexto = padre.text().replace($(el).text(), '').trim();
+            if (todoTexto.length > 20) sinopsis = todoTexto;
+          }
+        }
+      });
+      // Fallback: buscar td que contenga "Sinopsis" en el label y leer el siguiente
+      if (!sinopsis) {
+        $('td').each((_, cell) => {
+          if (sinopsis) return;
+          const texto = $(cell).text().trim();
+          if (texto.toLowerCase().startsWith('sinopsis')) {
+            const siguiente = $(cell).next('td');
+            const candidate = siguiente.length ? siguiente.text().trim() : '';
+            if (candidate.length > 20) sinopsis = candidate;
+          }
+        });
+      }
+
       // Mapa de portadas por número de tomo: alt="Titulo nºX" → src
+      // Listadomanga no tiene portada de colección separada — solo imágenes por tomo.
       const portadasPorNumero = new Map<number, string>();
-      let portadaUrl: string | undefined;
       $('img[src*="static.listadomanga.com"]').each((_, el) => {
         const src = $(el).attr('src') ?? '';
-        if (src.endsWith('.gif')) return;
+        if (!src || src.endsWith('.gif')) return;
         const alt = $(el).attr('alt') ?? '';
         const altMatch = alt.match(/nº\s*(\d+)/i);
         if (altMatch) {
           portadasPorNumero.set(parseInt(altMatch[1], 10), src);
-        } else if (!portadaUrl) {
-          // Primera imagen sin nº en alt → portada de la colección
-          portadaUrl = src;
         }
       });
-      // Si no hay portada de colección separada, usamos la del tomo 1
-      if (!portadaUrl && portadasPorNumero.size > 0) {
-        portadaUrl = portadasPorNumero.get(1) ?? portadasPorNumero.values().next().value;
-      }
+      // Portada de la obra = imagen del tomo con el número más bajo
+      const primerNumero = [...portadasPorNumero.keys()].sort((a, b) => a - b)[0];
+      const portadaUrl: string | undefined = primerNumero !== undefined
+        ? portadasPorNumero.get(primerNumero)
+        : undefined;
 
       // Tomos
       const tomos: TomoScrapeado[] = [];
@@ -147,7 +192,7 @@ export class ListadoMangaService {
 
       tomos.sort((a, b) => a.numero - b.numero);
 
-      return { listadoMangaId: id, titulo, tituloOriginal, autores: [...autores], editorial, portadaUrl, tomos };
+      return { listadoMangaId: id, titulo, tituloOriginal, autores: [...autores], editorial, portadaUrl, sinopsis, coleccion, tomos };
     } catch (err) {
       this.logger.error(`Error obteniendo colección ${id}: ${(err as Error).message}`);
       return null;

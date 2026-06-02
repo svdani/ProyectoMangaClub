@@ -164,18 +164,11 @@ export class ColeccionService {
       if (!mapa.has(obra.id)) {
         mapa.set(obra.id, {
           id: obra.id,
-
-          titulo_es:
-            obra.titulo_es,
-
-          portada_url:
-            obra.portada_url,
-
+          titulo_es: obra.titulo_es,
+          portada_url: obra.portada_url,
+          tipo: obra.tipo ?? null,
           tomos_poseidos: 0,
-
-          total_tomos:
-            item.volumen.edicion
-              .total_volumenes || 0,
+          total_tomos: item.volumen.edicion.total_volumenes || 0,
         });
       }
 

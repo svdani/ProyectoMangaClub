@@ -108,6 +108,40 @@ export class ListadoMangaSyncService {
     if (detalle.tituloOriginal) obra.titulo_original = detalle.tituloOriginal;
     if (detalle.autores.length)  obra.autores = detalle.autores;
     if (detalle.portadaUrl)      obra.portada_url = detalle.portadaUrl;
+    if (detalle.sinopsis)        obra.descripcion = detalle.sinopsis;
+    if (detalle.coleccion)       obra.demografia = detalle.coleccion;
+
+    // Enriquecer con AniList si aún no tiene descripción
+    if (!obra.descripcion) {
+      try {
+        const res = await fetch('https://graphql.anilist.co', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `query ($search: String) {
+              Media(search: $search, type: MANGA) {
+                id title { romaji } status description bannerImage averageScore genres
+              }
+            }`,
+            variables: { search: detalle.titulo },
+          }),
+        });
+        const json = await res.json();
+        const media = json.data?.Media;
+        if (media) {
+          if (!obra.titulo_original && media.title?.romaji) obra.titulo_original = media.title.romaji;
+          obra.anilist_id  = media.id;
+          obra.descripcion = media.description ?? null;
+          obra.banner_url  = media.bannerImage ?? null;
+          obra.score       = media.averageScore ?? null;
+          obra.generos     = media.genres ?? [];
+          if (!obra.estado && media.status) obra.estado = media.status;
+        }
+      } catch {
+        // AniList no disponible — continuamos sin enriquecer
+      }
+    }
+
     await this.obraRepo.save(obra);
 
     // Edición española

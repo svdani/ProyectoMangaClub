@@ -305,6 +305,8 @@ export class ObrasService {
         total_volumenes:
           edicion.total_volumenes,
 
+        tipo: edicion.obra?.tipo || null,
+
         estado: edicion.obra?.estado || this.inferirEstadoDesdeVolumenes(edicion.volumenes ?? []),
 
         descripcion:
