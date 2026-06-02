@@ -127,25 +127,26 @@ export class ListadoMangaSyncService {
     edicion.ultimo_tomo_publicado = publicados.length > 0 ? Math.max(...publicados.map((t) => t.numero)) : 0;
     await this.edicionRepo.save(edicion);
 
-    // Volúmenes — upsert ignorando duplicados (unique edicion_id + numero_tomo)
-    if (detalle.tomos.length > 0) {
+    // Volúmenes — upsert real: actualiza datos si ya existe (edicion_id + numero_tomo)
+    for (const t of detalle.tomos) {
       await this.volumenRepo
         .createQueryBuilder()
         .insert()
         .into(Volumen)
-        .values(
-          detalle.tomos.map((t) => ({
-            edicion_id:         edicion!.id,
-            numero_tomo:        t.numero,
-            paginas:            t.paginas ?? undefined,
-            precio:             t.precio  ?? undefined,
-            fecha_publicacion:  t.fechaPublicacion,
-            estado_publicacion: t.estado,
-            estado_stock:       t.estado === 'publicado' ? EstadoStock.DISPONIBLE : EstadoStock.PROXIMAMENTE,
-            portada_url:        t.portadaTomoUrl ?? undefined,
-          })),
+        .values({
+          edicion_id:         edicion!.id,
+          numero_tomo:        t.numero,
+          paginas:            t.paginas  ?? undefined,
+          precio:             t.precio   ?? undefined,
+          fecha_publicacion:  t.fechaPublicacion,
+          estado_publicacion: t.estado,
+          estado_stock:       t.estado === 'publicado' ? EstadoStock.DISPONIBLE : EstadoStock.PROXIMAMENTE,
+          portada_url:        t.portadaTomoUrl ?? undefined,
+        })
+        .orUpdate(
+          ['paginas', 'precio', 'fecha_publicacion', 'estado_publicacion', 'estado_stock', 'portada_url'],
+          ['edicion_id', 'numero_tomo'],
         )
-        .orIgnore()
         .execute();
     }
   }

@@ -88,15 +88,25 @@ export class ListadoMangaService {
       let editorial: string | undefined;
       $('a[href*="editorial.php"]').each((_, el) => { editorial = $(el).text().trim(); });
 
-      // Portada
+      // Mapa de portadas por número de tomo: alt="Titulo nºX" → src
+      const portadasPorNumero = new Map<number, string>();
       let portadaUrl: string | undefined;
-      $('img').each((_, el) => {
-        if (portadaUrl) return;
+      $('img[src*="static.listadomanga.com"]').each((_, el) => {
         const src = $(el).attr('src') ?? '';
-        if (src.includes('static.listadomanga.com') && !src.endsWith('.gif')) {
+        if (src.endsWith('.gif')) return;
+        const alt = $(el).attr('alt') ?? '';
+        const altMatch = alt.match(/nº\s*(\d+)/i);
+        if (altMatch) {
+          portadasPorNumero.set(parseInt(altMatch[1], 10), src);
+        } else if (!portadaUrl) {
+          // Primera imagen sin nº en alt → portada de la colección
           portadaUrl = src;
         }
       });
+      // Si no hay portada de colección separada, usamos la del tomo 1
+      if (!portadaUrl && portadasPorNumero.size > 0) {
+        portadaUrl = portadasPorNumero.get(1) ?? portadasPorNumero.values().next().value;
+      }
 
       // Tomos
       const tomos: TomoScrapeado[] = [];
@@ -104,16 +114,15 @@ export class ListadoMangaService {
       let estadoActual: TomoScrapeado['estado'] = 'publicado';
 
       $('td').each((_, cell) => {
-        // Reemplazar etiquetas HTML por espacio para evitar concatenación de nodos
+        // Sustituir tags por espacio para evitar concatenación sin separador
         const rawHtml = $(cell).html() ?? '';
         const texto = rawHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
         if (texto.includes('Números en preparación')) { estadoActual = 'proximamente'; return; }
         if (texto.includes('Números no editados'))    { estadoActual = 'no_editado';   return; }
         if (texto.includes('Pack especial') || texto.includes('sobrecubierta alternativa')) return;
-        if (!texto.includes('nº') || !texto.includes('€')) return;
 
-        // nº X seguido de espacio o separador (no dígito) para no capturar páginas pegadas
+        // Cada tomo ocupa una celda con su número, páginas, precio y fecha
         const numMatch = texto.match(/nº\s*(\d+)(?!\d)/i);
         if (!numMatch) return;
         const numero = parseInt(numMatch[1], 10);
@@ -121,23 +130,18 @@ export class ListadoMangaService {
         numerosVistos.add(numero);
 
         const paginasMatch = texto.match(/(\d{2,4})\s*p[áa]ginas/i);
-        const precioMatch  = texto.match(/([\d]+,[\d]+)\s*€/);
-
-        // Intentar extraer portada del tomo desde <img> en la misma fila/celda
-        const imgEl = $(cell).closest('tr').find('img[src*="static.listadomanga.com"]').first();
-        const portadaTomoUrl = imgEl.length ? (imgEl.attr('src') ?? undefined) : undefined;
-
+        const precioMatch  = texto.match(/([\d.,]+)\s*€/);
         const fechaRaw = this.extraerFechaString(texto);
         const fechaPublicacion = fechaRaw ? this.parsearFecha(fechaRaw) : undefined;
 
         tomos.push({
           numero,
           paginas:        paginasMatch ? parseInt(paginasMatch[1], 10) : null,
-          precio:         precioMatch  ? parseFloat(precioMatch[1].replace(',', '.')) : null,
+          precio:         precioMatch  ? parseFloat(precioMatch[1].replace('.', '').replace(',', '.')) : null,
           fecha:          fechaRaw,
           fechaPublicacion,
           estado:         estadoActual,
-          portadaTomoUrl,
+          portadaTomoUrl: portadasPorNumero.get(numero),
         });
       });
 
@@ -184,15 +188,15 @@ export class ListadoMangaService {
     return texto.match(new RegExp(`${etiqueta}:\\s*([^\\n]+)`, 'i'))?.[1]?.trim();
   }
 
-  /** Devuelve "15 Enero 2024" o "Enero 2024" tal cual — compatible con convertirFechaEspanol() */
+  /** Devuelve "15 Enero 2024" o "1 Octubre 2002" — día 1 si no hay día explícito */
   private extraerFechaString(texto: string): string | null {
     const m = texto.match(
-      /(\d+\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(\d{4})/i,
+      /(\d{1,2}\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(\d{4})/i,
     );
     if (!m) return null;
-    const dia = m[1] ? m[1].trim() + ' ' : '1 ';
+    const dia = m[1] ? m[1].trim() : '1';
     const mes = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
-    return `${dia}${mes} ${m[3]}`;
+    return `${dia} ${mes} ${m[3]}`;
   }
 
   private parsearFecha(fechaStr: string): Date | undefined {
