@@ -44,7 +44,8 @@ export default function ExploreScreen() {
     return obra.ediciones[0].total_volumenes || 0;
   }
 
-  function obtenerEstadoLabel(estado: string): string {
+  function obtenerEstadoLabel(estado: string | null): string | null {
+    if (!estado) return null;
     const map: Record<string, string> = {
       FINISHED: "Terminado",
       RELEASING: "En publicación",
@@ -56,7 +57,19 @@ export default function ExploreScreen() {
       hiatus: "Hiatus",
       cancelled: "Cancelado",
     };
-    return map[estado] || estado || "Desconocido";
+    return map[estado] ?? estado;
+  }
+
+  function obtenerTipoLabel(tipo: string | null): string | null {
+    if (!tipo) return null;
+    const map: Record<string, string> = {
+      manga: "Manga",
+      comic_us: "Cómic USA",
+      novela_grafica: "Novela Gráfica",
+      bd_europea: "BD Europea",
+      comic_nacional: "Cómic Nacional",
+    };
+    return map[tipo] ?? tipo;
   }
 
   return (
@@ -86,7 +99,18 @@ export default function ExploreScreen() {
               {item.titulo_original ? (
                 <Text style={styles.infoSecondary}>{item.titulo_original}</Text>
               ) : null}
-              <Text style={styles.info}>Estado: {obtenerEstadoLabel(item.estado)}</Text>
+              <View style={styles.tags}>
+                {obtenerTipoLabel(item.tipo) ? (
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>{obtenerTipoLabel(item.tipo)}</Text>
+                  </View>
+                ) : null}
+                {obtenerEstadoLabel(item.estado) ? (
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>{obtenerEstadoLabel(item.estado)}</Text>
+                  </View>
+                ) : null}
+              </View>
               <Text style={styles.info}>Tomos: {obtenerTotalTomos(item)}</Text>
             </View>
           </Pressable>
@@ -218,7 +242,29 @@ const styles = StyleSheet.create({
   infoSecondary: {
     color: "#888",
     fontSize: 13,
-    marginBottom: 3,
+    marginBottom: 4,
+  },
+
+  tags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 5,
+  },
+
+  tag: {
+    backgroundColor: "#1e1e2e",
+    borderWidth: 1,
+    borderColor: "#333",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+
+  tagText: {
+    color: "#aaa",
+    fontSize: 11,
+    fontWeight: "600",
   },
 
   info: {

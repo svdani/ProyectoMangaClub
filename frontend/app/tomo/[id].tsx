@@ -2,22 +2,21 @@ import {
   Dimensions,
   FlatList,
   Image,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 
+import { Stack, useLocalSearchParams } from "expo-router";
+
 import { useEffect, useState } from "react";
 
-import { useLocalSearchParams } from "expo-router";
-
 const { width } = Dimensions.get("window");
-
 const COVER_WIDTH = width * 0.78;
 
 export default function TomoScreen() {
   const { id } = useLocalSearchParams();
-
   const [tomo, setTomo] = useState<any>(null);
 
   useEffect(() => {
@@ -26,10 +25,8 @@ export default function TomoScreen() {
 
   async function cargarTomo() {
     try {
-      const response = await fetch(process.env.EXPO_PUBLIC_API_URL+`/volumenes/${id}`);
-
+      const response = await fetch(process.env.EXPO_PUBLIC_API_URL + `/volumenes/${id}`);
       const data = await response.json();
-      console.log(data);
       setTomo(data);
     } catch (error) {
       console.log(error);
@@ -44,108 +41,70 @@ export default function TomoScreen() {
     );
   }
 
-  const imagenes = [tomo.portada_url, ...(tomo.portadas_alternativas || [])];
+  const imagenes = [tomo.portada_url, ...(tomo.portadas_alternativas || [])].filter(Boolean);
 
   return (
-    <View style={styles.container}>
-      {/* swiper */}
+    <>
+      <Stack.Screen options={{ title: tomo.nombre_manga ?? "Tomo" }} />
 
-      <FlatList
-        data={imagenes}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        decelerationRate="fast"
-        snapToInterval={COVER_WIDTH + 28}
-        disableIntervalMomentum
-        keyExtractor={(_, index) => index.toString()}
-        contentContainerStyle={{
-          paddingHorizontal: (width - COVER_WIDTH) / 2,
-        }}
-        getItemLayout={(_, index) => ({
-          length: COVER_WIDTH + 20,
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
+        {/* Carrusel de portadas */}
+        <FlatList
+          data={imagenes}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          snapToInterval={COVER_WIDTH + 28}
+          disableIntervalMomentum
+          scrollEnabled={imagenes.length > 1}
+          keyExtractor={(_, index) => index.toString()}
+          contentContainerStyle={{ paddingHorizontal: (width - COVER_WIDTH) / 2 }}
+          getItemLayout={(_, index) => ({
+            length: COVER_WIDTH + 20,
+            offset: (COVER_WIDTH + 20) * index,
+            index,
+          })}
+          renderItem={({ item }) => (
+            <View style={{ width: COVER_WIDTH + 20, alignItems: "center" }}>
+              <Image source={{ uri: item }} style={styles.cover} />
+            </View>
+          )}
+        />
 
-          offset: (COVER_WIDTH + 20) * index,
+        {/* Info */}
+        <View style={styles.info}>
+          <Text style={styles.title}>{tomo.nombre_manga}</Text>
+          <Text style={styles.subtitle}>Tomo {tomo.numero_tomo}</Text>
 
-          index,
-        })}
-        renderItem={({ item }) => (
-          <View
-            style={{
-              width: COVER_WIDTH + 20,
+          <View style={styles.separator} />
 
-              alignItems: "center",
-            }}
-          >
-            <Image
-              source={{
-                uri: item,
-              }}
-              style={styles.cover}
-            />
-          </View>
-        )}
-      />
+          <InfoRow label="Estado publicación" value={
+            tomo.estado_publicacion === "publicado"
+              ? "Publicado"
+              : tomo.estado_publicacion === "proximamente"
+                ? "Próximamente"
+                : tomo.estado_publicacion === "no_editado"
+                  ? "No editado"
+                  : tomo.estado_publicacion ?? "Sin datos"
+          } />
 
-      {/* info */}
+          <InfoRow label="Páginas" value={tomo.paginas?.toString() ?? null} />
+          <InfoRow label="Precio" value={tomo.precio ? `${tomo.precio} €` : null} />
+          <InfoRow label="Capítulos" value={tomo.capitulos?.length ? tomo.capitulos.join(", ") : null} />
+          <InfoRow label="ISBN" value={tomo.isbn ?? null} />
+        </View>
+      </ScrollView>
+    </>
+  );
+}
 
-      <View style={styles.info}>
-        <Text style={styles.title}>{tomo.nombre_manga}</Text>
-
-        <Text style={styles.subtitle}>Tomo {tomo.numero_tomo}</Text>
-
-        <View style={styles.separator} />
-
-        <Text style={styles.label}>Estado manga</Text>
-
-        <Text style={styles.value}>
-          {tomo.estado_manga === "FINISHED"
-            ? "Terminado"
-            : tomo.estado_manga === "RELEASING"
-              ? "En publicación"
-              : tomo.estado_manga === "HIATUS"
-                ? "Hiatus"
-                : tomo.estado_manga === "CANCELLED"
-                  ? "Cancelado"
-                  : tomo.estado_manga}
-        </Text>
-
-        <Text style={styles.label}>Estado publicación</Text>
-
-        <Text style={styles.value}>
-          {tomo.estado_publicacion === "publicado"
-            ? "Publicado"
-            : tomo.estado_publicacion === "proximamente"
-              ? "Próximamente"
-              : "No editado"}
-        </Text>
-
-        <Text style={styles.label}>Páginas</Text>
-
-        <Text style={styles.value}>{tomo.paginas || "Sin datos"}</Text>
-
-        <Text style={styles.label}>Precio</Text>
-
-        <Text style={styles.value}>
-          {tomo.precio ? `${tomo.precio} €` : "Sin datos"}
-        </Text>
-
-        <Text style={styles.label}>Capítulos</Text>
-
-        <Text style={styles.value}>
-          {tomo.capitulos?.join(", ") || "Sin datos"}
-        </Text>
-
-        <Text style={styles.label}>ISBN</Text>
-
-        <Text style={styles.value}>{tomo.isbn || "Sin ISBN"}</Text>
-
-        <Text style={styles.label}>Variantes</Text>
-
-        <Text style={styles.value}>
-          {tomo.portadas_alternativas?.length} alternativas
-        </Text>
-      </View>
-    </View>
+function InfoRow({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value}>{value}</Text>
+    </>
   );
 }
 
@@ -169,31 +128,26 @@ const styles = StyleSheet.create({
 
   cover: {
     width: COVER_WIDTH,
-
     height: COVER_WIDTH * 1.45,
-
     borderRadius: 20,
-
     marginTop: 25,
-
     marginBottom: 20,
   },
 
   info: {
     paddingHorizontal: 25,
     paddingTop: 10,
-    paddingBottom: 60,
   },
 
   title: {
     color: "#fff",
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: "bold",
   },
 
   subtitle: {
     color: "#aaa",
-    fontSize: 22,
+    fontSize: 20,
     marginTop: 5,
     marginBottom: 20,
   },
@@ -206,13 +160,15 @@ const styles = StyleSheet.create({
 
   label: {
     color: "#777",
-    fontSize: 15,
+    fontSize: 13,
     marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
 
   value: {
     color: "#fff",
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: "600",
     marginTop: 4,
   },

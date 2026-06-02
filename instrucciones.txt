@@ -1,0 +1,15 @@
+Arranacar BACK -->      npm run start:dev
+
+Arrancar FRONT -->  npm start 
+Arrancar FRONT forzando a limpio --> npx expo start --clear 
+
+LAZAR SCRPAIN DESDE 0 --> Invoke-RestMethod -Method Post -Uri "http://192.168.1.133:3000/scraping/sync"   
+LANZAR SCRAPING CON INFO --> Invoke-RestMethod -Method Post -Uri "http://192.168.1.133:3000/scraping/resync-todas"  
+
+SUBIR A GIT
+    git add .
+    git commit -m "Actualizar informacion detalles tomo tanto ront como back(sinopsis, genero ...)  y front mi biblioteca"
+    git push 
+
+BAJAR DE GIT
+    git pull      

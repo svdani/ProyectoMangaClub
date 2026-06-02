@@ -15,15 +15,38 @@ import { useEffect, useState } from "react";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+const TIPO_LABEL: Record<string, string> = {
+  manga: "Manga",
+  comic_us: "Cómic USA",
+  novela_grafica: "Novela Gráfica",
+  bd_europea: "BD Europea",
+  comic_nacional: "Cómic Nacional",
+};
+
+function estadoLabel(estado: string): string {
+  const map: Record<string, string> = {
+    FINISHED: "Terminado", completed: "Terminado",
+    RELEASING: "En publicación", ongoing: "En publicación",
+    HIATUS: "Hiatus", hiatus: "Hiatus",
+    CANCELLED: "Cancelado", cancelled: "Cancelado",
+  };
+  return map[estado] ?? estado;
+}
+
+function estadoColor(estado: string): string {
+  if (estado === "FINISHED" || estado === "completed") return "#4ade80";
+  if (estado === "RELEASING" || estado === "ongoing") return "#60a5fa";
+  if (estado === "HIATUS" || estado === "hiatus") return "#fb923c";
+  if (estado === "CANCELLED" || estado === "cancelled") return "#f87171";
+  return "#888";
+}
+
 export default function ObraScreen() {
   const { id } = useLocalSearchParams();
 
   const [ediciones, setEdiciones] = useState<any[]>([]);
-
   const [obra, setObra] = useState<any>(null);
-
   const [mostrarSinopsis, setMostrarSinopsis] = useState(false);
-
   const [poseidos, setPoseidos] = useState(0);
 
   useEffect(() => {
@@ -33,39 +56,25 @@ export default function ObraScreen() {
   async function cargarEdiciones() {
     try {
       const response = await fetch(
-        process.env.EXPO_PUBLIC_API_URL+`/obras/${id}/ediciones`,
+        process.env.EXPO_PUBLIC_API_URL + `/obras/${id}/ediciones`,
       );
-
       const data = await response.json();
-
       setEdiciones(data);
 
       if (data.length > 0) {
         setObra({
           ...data[0],
-          // La portada puede estar en la edición o en la obra padre
           portada_url: data[0].portada_url || data[0].obra?.portada_url || null,
           estado: data[0]?.estado ?? null,
         });
 
         const token = await AsyncStorage.getItem("token");
-
         const huecos = await fetch(
-          process.env.EXPO_PUBLIC_API_URL+`/coleccion/huecos/${data[0].id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
+          process.env.EXPO_PUBLIC_API_URL + `/coleccion/huecos/${data[0].id}`,
+          { headers: { Authorization: `Bearer ${token}` } },
         );
-
         const tomos = await huecos.json();
-
-        const totalPoseidos = tomos.filter(
-          (t: any) => t.estado === "poseido",
-        ).length;
-
-        setPoseidos(totalPoseidos);
+        setPoseidos(tomos.filter((t: any) => t.estado === "poseido").length);
       }
     } catch (error) {
       console.log(error);
@@ -75,13 +84,7 @@ export default function ObraScreen() {
   if (!obra) {
     return (
       <View style={styles.loading}>
-        <Text
-          style={{
-            color: "#fff",
-          }}
-        >
-          Cargando...
-        </Text>
+        <Text style={{ color: "#fff" }}>Cargando...</Text>
       </View>
     );
   }
@@ -91,94 +94,84 @@ export default function ObraScreen() {
       ? Math.round((poseidos / obra.total_volumenes) * 100)
       : 0;
 
+  const generos: string[] = obra?.obra?.generos ?? [];
+  const descripcion: string | null = obra?.descripcion || null;
+
   return (
     <FlatList
       style={styles.container}
-      contentContainerStyle={{
-        paddingBottom: 40,
-      }}
+      contentContainerStyle={{ paddingBottom: 40 }}
       data={ediciones}
       keyExtractor={(item) => item.id}
       ListHeaderComponent={
         <>
-          <Image
-            source={{
-              uri: obra.portada_url,
-            }}
-            style={styles.cover}
-          />
+          <Image source={{ uri: obra.portada_url }} style={styles.cover} />
 
           <Text style={styles.title}>{obra.nombre_edicion}</Text>
 
-          {obra?.estado ? (
-            <Text style={styles.status}>
-              {obra.estado === "FINISHED" || obra.estado === "completed"
-                ? "Terminado"
-                : obra.estado === "RELEASING" || obra.estado === "ongoing"
-                  ? "En publicación"
-                  : obra.estado === "HIATUS" || obra.estado === "hiatus"
-                    ? "Hiatus"
-                    : obra.estado === "CANCELLED" || obra.estado === "cancelled"
-                      ? "Cancelado"
-                      : obra.estado}
-            </Text>
-          ) : null}
+          {/* Tipo + Estado con estilos diferentes */}
+          <View style={styles.metaTags}>
+            {obra?.tipo ? (
+              <View style={styles.tipoTag}>
+                <Text style={styles.tipoTagText}>
+                  {TIPO_LABEL[obra.tipo] ?? obra.tipo}
+                </Text>
+              </View>
+            ) : null}
+            {obra?.estado ? (
+              <View style={[styles.estadoTag, { borderColor: estadoColor(obra.estado) }]}>
+                <Text style={[styles.estadoTagText, { color: estadoColor(obra.estado) }]}>
+                  {estadoLabel(obra.estado)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
           <Text style={styles.progressText}>
-            {poseidos}
-            {" / "}
-            {obra.total_volumenes}
-            {" tomos"}
+            {poseidos} / {obra.total_volumenes} tomos
           </Text>
 
-          <Text style={styles.percent}>
-            {porcentaje}
-            {"% completado"}
-          </Text>
+          <Text style={styles.percent}>{porcentaje}% completado</Text>
 
           <View style={styles.barBackground}>
-            <View
-              style={[
-                styles.barFill,
-                {
-                  width: `${porcentaje}%`,
-                },
-              ]}
-            />
+            <View style={[styles.barFill, { width: `${porcentaje}%` }]} />
           </View>
 
-          <View style={styles.generosContainer}>
-            {obra?.obra?.generos?.map((genero: string, index: number) => (
-              <View key={index} style={styles.generoTag}>
-                <Text style={styles.generoText}>{genero}</Text>
-              </View>
-            ))}
-          </View>
-
-          <Pressable
-            style={styles.sinopsisHeader}
-            onPress={() => setMostrarSinopsis(!mostrarSinopsis)}
-          >
-            <Text style={styles.sinopsisTitle}>Sinopsis</Text>
-
-            <Ionicons
-              name={mostrarSinopsis ? "chevron-up" : "chevron-down"}
-              size={22}
-              color="#fff"
-            />
-          </Pressable>
-
-          {mostrarSinopsis && (
-            <View style={styles.sinopsisBox}>
-              <Text style={styles.sinopsisText}>
-                {obra?.descripcion
-                  ? obra.descripcion
-                      .replace(/<br>/g, "\n")
-                      .replace(/<[^>]*>/g, "")
-                  : "Sin sinopsis disponible"}
-              </Text>
+          {/* Géneros — solo si hay datos */}
+          {generos.length > 0 ? (
+            <View style={styles.generosContainer}>
+              {generos.map((genero, index) => (
+                <View key={index} style={styles.generoTag}>
+                  <Text style={styles.generoText}>{genero}</Text>
+                </View>
+              ))}
             </View>
-          )}
+          ) : null}
+
+          {/* Sinopsis — solo si hay datos */}
+          {descripcion ? (
+            <>
+              <Pressable
+                style={styles.sinopsisHeader}
+                onPress={() => setMostrarSinopsis(!mostrarSinopsis)}
+              >
+                <Text style={styles.sinopsisTitle}>Sinopsis</Text>
+                <Ionicons
+                  name={mostrarSinopsis ? "chevron-up" : "chevron-down"}
+                  size={22}
+                  color="#fff"
+                />
+              </Pressable>
+
+              {mostrarSinopsis && (
+                <View style={styles.sinopsisBox}>
+                  <Text style={styles.sinopsisText}>
+                    {descripcion.replace(/<br>/g, "\n").replace(/<[^>]*>/g, "")}
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : null}
 
           <Text style={styles.section}>Ediciones</Text>
         </>
@@ -190,20 +183,15 @@ export default function ObraScreen() {
         >
           <Image
             source={{
-              uri: item.portada_url,
+              uri: item.portada_url || item.obra?.portada_url || obra.portada_url,
             }}
             style={styles.cardCover}
           />
 
           <View>
             <Text style={styles.name}>{item.nombre_edicion}</Text>
-
             <Text style={styles.info}>{item.editorial}</Text>
-
-            <Text style={styles.info}>
-              {item.total_volumenes}
-              {" tomos"}
-            </Text>
+            <Text style={styles.info}>{item.total_volumenes} tomos</Text>
           </View>
         </Pressable>
       )}
@@ -239,6 +227,43 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
+  metaTags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 5,
+  },
+
+  // Tipo: tag sólido azul/índigo — indica categoría
+  tipoTag: {
+    backgroundColor: "#312e81",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+
+  tipoTagText: {
+    color: "#a5b4fc",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+
+  // Estado: solo borde coloreado según el estado
+  estadoTag: {
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+
+  estadoTagText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+
   progressText: {
     color: "#fff",
     marginTop: 15,
@@ -258,7 +283,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
     marginTop: 10,
-    marginBottom: 30,
+    marginBottom: 20,
   },
 
   barFill: {
@@ -271,6 +296,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 15,
+    marginTop: 10,
   },
 
   card: {
@@ -287,6 +313,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 90,
     borderRadius: 10,
+    backgroundColor: "#1a1a1a",
   },
 
   name: {
@@ -300,15 +327,31 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  status: {
-    color: "#f59e0b",
-    fontSize: 18,
+  generosContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 20,
+  },
+
+  generoTag: {
+    backgroundColor: "#18181b",
+    borderWidth: 1,
+    borderColor: "#27272a",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+
+  generoText: {
+    color: "#e4e4e7",
+    fontSize: 12,
     fontWeight: "600",
-    marginTop: 10,
+    letterSpacing: 0.3,
   },
 
   sinopsisHeader: {
-    marginTop: 25,
+    marginTop: 15,
     marginBottom: 10,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -332,41 +375,5 @@ const styles = StyleSheet.create({
     color: "#ccc",
     fontSize: 15,
     lineHeight: 24,
-  },
-
-  generosContainer: {
-    flexDirection: "row",
-
-    flexWrap: "wrap",
-
-    gap: 12,
-
-    marginTop: 10,
-
-    marginBottom: 30,
-  },
-
-  generoTag: {
-    backgroundColor: "#18181b",
-
-    borderWidth: 1,
-
-    borderColor: "#27272a",
-
-    paddingHorizontal: 16,
-
-    paddingVertical: 9,
-
-    borderRadius: 999,
-  },
-
-  generoText: {
-    color: "#e4e4e7",
-
-    fontSize: 13,
-
-    fontWeight: "700",
-
-    letterSpacing: 0.3,
   },
 });

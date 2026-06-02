@@ -143,7 +143,14 @@ export default function HomeScreen() {
               {item.titulo_es}
             </Text>
 
-            <View style={styles.gridProgress}>
+            <View style={styles.gridMeta}>
+              {item.tipo ? (
+                <View style={styles.tipoTag}>
+                  <Text style={styles.tipoTagText}>
+                    {{ manga: "Manga", comic_us: "Cómic USA", novela_grafica: "Novela Gráfica", bd_europea: "BD Europea", comic_nacional: "Cómic Nacional" }[item.tipo as string] ?? item.tipo}
+                  </Text>
+                </View>
+              ) : <View />}
               <AnimatedCircularProgress
                 size={42}
                 width={5}
@@ -152,17 +159,13 @@ export default function HomeScreen() {
                 backgroundColor="#222"
                 rotation={0}
               >
-                {() => (
-                  <Text style={styles.gridPercent}>{item.porcentaje}%</Text>
-                )}
+                {() => <Text style={styles.gridPercent}>{item.porcentaje}%</Text>}
               </AnimatedCircularProgress>
-
-              <Text style={styles.gridInfo}>
-                {item.tomos_poseidos}
-                {" / "}
-                {item.total_tomos}
-              </Text>
             </View>
+
+            <Text style={styles.gridInfo}>
+              {item.tomos_poseidos} / {item.total_tomos}
+            </Text>
           </Pressable>
         )}
       />
@@ -174,7 +177,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
-    padding: 20,
+    padding: 15,
   },
 
   title: {
@@ -242,7 +245,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
     borderRadius: 25,
     padding: 20,
-    marginBottom: 25,
+    marginBottom: 18,
     flexDirection: "row",
     alignItems: "center",
     gap: 25,
@@ -256,7 +259,7 @@ const styles = StyleSheet.create({
 
   globalNumbers: {
     color: "#888",
-    fontSize: 14,
+    fontSize: 12,
     marginTop: 4,
   },
 
@@ -319,13 +322,30 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
-    marginBottom: 10,
+    marginBottom: 6,
   },
 
-  gridProgress: {
+  tipoTag: {
+    alignSelf: "flex-start",
+    backgroundColor: "#312e81",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+
+  tipoTagText: {
+    color: "#a5b4fc",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+
+  gridMeta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
 
   gridPercent: {
@@ -336,15 +356,16 @@ const styles = StyleSheet.create({
 
   gridInfo: {
     color: "#aaa",
-    fontSize: 14,
-    flex: 1,
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 6,
   },
 
   sectionTitle: {
     color: "#888",
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "600",
-    marginBottom: 14,
+    marginBottom: 12,
     marginLeft: 4,
   },
 });
