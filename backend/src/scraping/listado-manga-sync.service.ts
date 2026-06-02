@@ -142,11 +142,40 @@ export class ListadoMangaSyncService {
             fecha_publicacion:  t.fechaPublicacion,
             estado_publicacion: t.estado,
             estado_stock:       t.estado === 'publicado' ? EstadoStock.DISPONIBLE : EstadoStock.PROXIMAMENTE,
+            portada_url:        t.portadaTomoUrl ?? undefined,
           })),
         )
         .orIgnore()
         .execute();
     }
+  }
+
+  // ─── Re-sync completo de todas las obras existentes ─────────────────────
+  async resyncTodas(): Promise<void> {
+    this.logger.log('▶ Iniciando re-sync completo de todas las obras con listado_manga_id...');
+
+    const obras = await this.obraRepo.find({
+      select: { listado_manga_id: true },
+      where: { listado_manga_id: Not(IsNull()) },
+    });
+
+    this.logger.log(`Total obras a re-sincronizar: ${obras.length}`);
+
+    const ids = obras.map((o) => o.listado_manga_id!);
+    let i = 0;
+    const worker = async (): Promise<void> => {
+      while (i < ids.length) {
+        const id = ids[i++];
+        try {
+          await this.syncUnaColeccion(id);
+        } catch (err) {
+          this.logger.error(`Error re-sync ${id}: ${(err as Error).message}`);
+        }
+        await this.scraper.sleep(300);
+      }
+    };
+    await Promise.all(Array.from({ length: CONCURRENT }, () => worker()));
+    this.logger.log('✅ Re-sync completo terminado');
   }
 
   // ─── Re-sync nocturno ─────────────────────────────────────────────────────

@@ -11,11 +11,12 @@ export interface CatalogoRef {
 
 export interface TomoScrapeado {
   numero: number;
-  paginas: number | null;       // null si no se encuentra
-  precio: number | null;        // null si no se encuentra
-  fecha: string | null;         // "15 Enero 2024" — igual que antes para obras.service.ts
-  fechaPublicacion?: Date;      // Date parsada (usada por sync.service)
+  paginas: number | null;
+  precio: number | null;
+  fecha: string | null;         // "15 Enero 2024"
+  fechaPublicacion?: Date;
   estado: 'publicado' | 'proximamente' | 'no_editado';
+  portadaTomoUrl?: string;
 }
 
 export interface ColeccionDetalle {
@@ -61,7 +62,18 @@ export class ListadoMangaService {
       const $ = cheerio.load(html);
 
       const titulo = $('title').text().replace('Listado Manga · Colección ·', '').trim();
-      const tituloOriginal = this.extraerEtiqueta($('td').text(), 'Título original');
+
+      // Buscar la celda que dice "Título original" y leer la celda adyacente
+      let tituloOriginal: string | undefined;
+      $('td').each((_, cell) => {
+        const texto = $(cell).text().trim();
+        if (texto === 'Título original' || texto.startsWith('Título original:')) {
+          const siguiente = $(cell).next('td');
+          tituloOriginal = siguiente.length
+            ? siguiente.text().trim()
+            : texto.replace(/^Título original:\s*/i, '').trim() || undefined;
+        }
+      });
 
       // Autores
       const autores = new Set<string>();
@@ -92,33 +104,40 @@ export class ListadoMangaService {
       let estadoActual: TomoScrapeado['estado'] = 'publicado';
 
       $('td').each((_, cell) => {
-        const texto = $(cell).text().trim();
+        // Reemplazar etiquetas HTML por espacio para evitar concatenación de nodos
+        const rawHtml = $(cell).html() ?? '';
+        const texto = rawHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
         if (texto.includes('Números en preparación')) { estadoActual = 'proximamente'; return; }
         if (texto.includes('Números no editados'))    { estadoActual = 'no_editado';   return; }
         if (texto.includes('Pack especial') || texto.includes('sobrecubierta alternativa')) return;
         if (!texto.includes('nº') || !texto.includes('€')) return;
 
-        const numMatch = texto.match(/nº\s*(\d+)/i);
+        // nº X seguido de espacio o separador (no dígito) para no capturar páginas pegadas
+        const numMatch = texto.match(/nº\s*(\d+)(?!\d)/i);
         if (!numMatch) return;
         const numero = parseInt(numMatch[1], 10);
         if (numerosVistos.has(numero)) return;
         numerosVistos.add(numero);
 
-        const paginasMatch = texto.match(/(\d{2,4})\s*páginas/i);
+        const paginasMatch = texto.match(/(\d{2,4})\s*p[áa]ginas/i);
         const precioMatch  = texto.match(/([\d]+,[\d]+)\s*€/);
 
-        // fecha como string "15 Enero 2024" (compatibilidad con obras.service.ts)
+        // Intentar extraer portada del tomo desde <img> en la misma fila/celda
+        const imgEl = $(cell).closest('tr').find('img[src*="static.listadomanga.com"]').first();
+        const portadaTomoUrl = imgEl.length ? (imgEl.attr('src') ?? undefined) : undefined;
+
         const fechaRaw = this.extraerFechaString(texto);
         const fechaPublicacion = fechaRaw ? this.parsearFecha(fechaRaw) : undefined;
 
         tomos.push({
           numero,
-          paginas:  paginasMatch ? parseInt(paginasMatch[1], 10) : null,
-          precio:   precioMatch  ? parseFloat(precioMatch[1].replace(',', '.')) : null,
-          fecha:    fechaRaw,
+          paginas:        paginasMatch ? parseInt(paginasMatch[1], 10) : null,
+          precio:         precioMatch  ? parseFloat(precioMatch[1].replace(',', '.')) : null,
+          fecha:          fechaRaw,
           fechaPublicacion,
-          estado:   estadoActual,
+          estado:         estadoActual,
+          portadaTomoUrl,
         });
       });
 

@@ -51,68 +51,42 @@ export class ColeccionService {
         },
       });
 
+    // Inferir estado de la serie a partir de los tomos si la obra no tiene estado
+    const inferirEstadoDesdeTomos = (vols: Volumen[]): string => {
+      const hoy = new Date();
+      const sinFechaOFutura = vols.some(
+        (v) => !v.fecha_publicacion || new Date(v.fecha_publicacion) > hoy,
+      );
+      return sinFechaOFutura ? 'ongoing' : 'completed';
+    };
+
+    const estadoObra = volumenes[0]?.edicion?.obra?.estado
+      ?? (volumenes.length > 0 ? inferirEstadoDesdeTomos(volumenes) : null);
+
     return volumenes.map((vol) => {
       let estado = 'hueco';
 
-      const item =
-        coleccion.find(
-          (c) =>
-            c.volumen_id === vol.id,
-        );
+      const item = coleccion.find((c) => c.volumen_id === vol.id);
+      if (item) estado = item.estado;
 
-      if (item) {
-        estado = item.estado;
-      }
-
-            
       return {
         id: vol.id,
-
-        numero_tomo:
-          vol.numero_tomo,
-
+        numero_tomo: vol.numero_tomo,
         isbn: vol.isbn,
-
-        portada_url:
-          vol.portada_url,
-
-        portadas_alternativas:
-          vol.portadas_alternativas ||
-          [],
-
+        portada_url: vol.portada_url || vol.edicion?.obra?.portada_url || null,
+        portadas_alternativas: vol.portadas_alternativas || [],
         estado,
-
         publicado:
           vol.fecha_publicacion
-            ? new Date(
-                vol.fecha_publicacion,
-              ) <= new Date()
-            : vol.numero_tomo <=
-              (vol.edicion
-                ?.ultimo_tomo_publicado ||
-                0),
-
-        nombre_manga:
-          vol.edicion?.obra
-            ?.titulo_es,
-
-        estado_manga:
-          vol.edicion &&
-          vol.edicion.obra
-            ? vol.edicion.obra
-                .estado
-            : null,
-
-        fecha_publicacion:
-          vol.fecha_publicacion,
-
-        capitulos:
-          vol.capitulos || [],
-
-        estado_stock:
-          vol.estado_stock,
+            ? new Date(vol.fecha_publicacion) <= new Date()
+            : vol.numero_tomo <= (vol.edicion?.ultimo_tomo_publicado || 0),
+        nombre_manga: vol.edicion?.obra?.titulo_es,
+        estado_manga: estadoObra,
+        fecha_publicacion: vol.fecha_publicacion,
+        capitulos: vol.capitulos || [],
+        estado_stock: vol.estado_stock,
       };
-            });
+    });
           }
 
   async añadirATuColeccion(

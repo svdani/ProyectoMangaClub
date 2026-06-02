@@ -36,7 +36,7 @@ export class Obra {
   titulo_es: string;
 
   @Column({
-    type: 'text'
+    type: 'text',
     nullable: true,
   })
   titulo_original: string;
@@ -53,7 +53,6 @@ export class Obra {
   })
   estado: string;
 
-  // NUEVO
 
   @Column({
     nullable: true,

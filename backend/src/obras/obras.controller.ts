@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { ObrasService } from './obras.service';
@@ -32,7 +33,12 @@ export class ObrasController {
   }
 
   // IMPORTANTE:
-  // ruta específica ANTES
+  // rutas específicas ANTES que /:id
+
+  @Get('buscar')
+  buscarPorTitulo(@Query('q') q: string) {
+    return this.obrasService.buscarPorTitulo(q || '');
+  }
 
   @Get('mangadex/:id')
   obtenerPorMangadex(

@@ -12,7 +12,7 @@ import { Volumen } from '../volumenes/volumen.entity';
 
 import { ImportarObraDto } from './dto/importar-obra.dto';
 
-import { ScrapingService } from '../scraping/scraping.service';
+
 import { ListadoMangaService } from '../scraping/listado-manga.service';
 @Injectable()
 export class ObrasService {
@@ -26,597 +26,210 @@ export class ObrasService {
     @InjectRepository(Volumen)
     private volumenRepo: Repository<Volumen>,
 
-    private scrapingService: ScrapingService,
     
     private listadoMangaService: ListadoMangaService,
   ) {}
 
-  async importarObra(
-    dto: ImportarObraDto,
-  ) {
-    
-    //await this.listadoMangaService.obtenerNovedades();
-    // Upsert atómico — evita duplicate key en llamadas concurrentes
+  async importarObra(dto: ImportarObraDto) {
+    // 1. Upsert atómico — respuesta inmediata
     await this.obraRepo
       .createQueryBuilder()
       .insert()
       .into('obra')
-      .values({ mangadex_id: dto.mangadex_id, titulo_es: dto.titulo, portada_url: dto.portada_url })
-      .orIgnore()  // si ya existe, no hace nada
+      .values({
+        mangadex_id: dto.mangadex_id,
+        titulo_es: dto.titulo,
+        portada_url: dto.portada_url,
+      })
+      .orIgnore()
       .execute();
 
-    let obra = await this.obraRepo.findOne({ where: { mangadex_id: dto.mangadex_id } });
+    let obra = await this.obraRepo.findOne({
+      where: { mangadex_id: dto.mangadex_id },
+    });
 
-    // =========================
-    // AniList
-    // =========================
-
-    let anilistData: any =
-      null;
-
-    try {
-      const response =
-        await fetch(
-          'https://graphql.anilist.co',
-          {
-            method: 'POST',
-
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-
-            body: JSON.stringify({
-              query: `
-              query ($search: String) {
-                Media(
-                  search: $search,
-                  type: MANGA
-                ) {
-                  id
-
-                  title {
-                    romaji
-                  }
-
-                  status
-
-                  description
-
-                  bannerImage
-
-                  averageScore
-
-                  genres
-                }
-              }
-            `,
-
-              variables: {
-                search:
-                  dto.titulo,
-              },
-            }),
-          },
-        );
-
-      const json =
-        await response.json();
-
-      anilistData =
-        json.data?.Media;
-
-      console.log(
-        'ANILIST:',
-        dto.titulo,
-        anilistData,
-      );
-    } catch (error) {
-      console.log(error);
-    }
-
-    // =========================
-    // Estado
-    // =========================
-
-    const estado =
-      anilistData?.status ||
-      dto.estado ||
-      'UNKNOWN';
-
-    console.log(
-      'ESTADO FINAL:',
-      dto.titulo,
-      estado,
-    );
-    
-    const ivrea =
-      await this.scrapingService.buscarIvrea(
-        dto.titulo,
-      );
-
-    console.log(
-      'IVREA RESULTADO:',
-      ivrea,
-    );
-
-    const norma =
-      await this.scrapingService.buscarNorma(
-        dto.titulo,
-      );
-
-    console.log(
-      'NORMA RESULTADO:',
-      norma,
-    );
-
-    const planeta =
-      await this.scrapingService.buscarPlaneta(
-        dto.titulo,
-      );
-
-    console.log(
-      'PLANETA RESULTADO:',
-      planeta,
-    );
-
-    // =========================
-    // Actualizar obra (siempre existe por el upsert de arriba)
-    // =========================
-
-    obra!.titulo_es        = dto.titulo;
-    obra!.titulo_original  = anilistData?.title?.romaji;
-    obra!.portada_url      = dto.portada_url;
-    obra!.mangadex_id      = dto.mangadex_id;
-    obra!.estado           = estado as any;
-    obra!.anilist_id       = anilistData?.id;
-    obra!.descripcion      = anilistData?.description;
-    obra!.banner_url       = anilistData?.bannerImage;
-    obra!.score            = anilistData?.averageScore;
-    obra!.generos          = anilistData?.genres || [];
-
-    await this.obraRepo.save(obra!);
-
-    // =========================
-    // Buscar edición
-    // =========================
-
-    let edicion =
-      await this.edicionRepo.findOne(
-        {
-          where: {
-            obra_id: obra!.id,
-          },
-        },
-      );
-
-    // =========================
-    // Crear edición
-    // =========================
+    // Crear edición básica si no existe
+    let edicion = await this.edicionRepo.findOne({
+      where: { obra_id: obra!.id },
+    });
 
     if (!edicion) {
-      edicion =
-        await this.edicionRepo.save(
-          this.edicionRepo.create({
-            obra_id: obra!.id,
-
-            pais: 'ES',
-
-            editorial:
-              'MangaDex',
-
-            idioma: 'ES',
-
-            nombre_edicion:
-              dto.titulo,
-
-            portada_url:
-              dto.portada_url,
-
-            total_volumenes:
-              dto.total_tomos ||
-              0,
-          }),
-        );
+      edicion = await this.edicionRepo.save(
+        this.edicionRepo.create({
+          obra_id: obra!.id,
+          pais: 'ES',
+          editorial: 'MangaDex',
+          idioma: 'ES',
+          nombre_edicion: dto.titulo,
+          portada_url: dto.portada_url,
+          total_volumenes: dto.total_tomos || 0,
+        }),
+      );
     }
 
-    // =========================
-    // Obtener covers
-    // =========================
-
-    let covers: any[] = [];
-
-    let offset = 0;
-
-    let total = 0;
-
-    do {
-      const response =
-        await fetch(
-          `https://api.mangadex.org/cover?manga[]=${dto.mangadex_id}&limit=100&offset=${offset}`,
-        );
-
-      const coversData =
-        await response.json();
-
-      total =
-        coversData.total || 0;
-
-      covers = [
-        ...covers,
-        ...(coversData.data ||
-          []),
-      ];
-      console.log(
-  'COVERS RAW:',
-  covers.map((c) => ({
-    volume:
-      c.attributes?.volume,
-
-    version:
-      c.attrinubutes?.version,
-
-    locale:
-      c.attributes?.locale,
-
-    description:
-      c.attributes
-        ?.description,
-
-    file:
-      c.attributes?.fileName,
-  })),
-);
-
-      offset += 100;
-    } while (
-      covers.length < total
+    // 2. Enriquecimiento en background — no await
+    this.enriquecerObra(obra!, edicion, dto).catch((err) =>
+      console.error('Error enriqueciendo obra:', err),
     );
 
-    // =========================
-    // Ordenar covers
-    // =========================
+    // 3. Responder inmediatamente con la obra
+    return obra;
+  }
+
+  private async enriquecerObra(obra: Obra, edicion: Edicion, dto: ImportarObraDto) {
+    // AniList
+    let anilistData: any = null;
+    try {
+      const response = await fetch('https://graphql.anilist.co', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `query ($search: String) {
+            Media(search: $search, type: MANGA) {
+              id title { romaji } status description bannerImage averageScore genres
+            }
+          }`,
+          variables: { search: dto.titulo },
+        }),
+      });
+      const json = await response.json();
+      anilistData = json.data?.Media;
+    } catch (error) {
+      console.log('AniList error:', error);
+    }
+
+    const estado = anilistData?.status || dto.estado || 'UNKNOWN';
+
+    obra.titulo_original = anilistData?.title?.romaji;
+    obra.estado          = estado;
+    obra.anilist_id      = anilistData?.id;
+    obra.descripcion     = anilistData?.description;
+    obra.banner_url      = anilistData?.bannerImage;
+    obra.score           = anilistData?.averageScore;
+    obra.generos         = anilistData?.genres || [];
+    await this.obraRepo.save(obra);
+
+    // Covers MangaDex
+    let covers: any[] = [];
+    let offset = 0;
+    let total = 0;
+    do {
+      const response = await fetch(
+        `https://api.mangadex.org/cover?manga[]=${dto.mangadex_id}&limit=100&offset=${offset}`,
+      );
+      const coversData = await response.json();
+      total = coversData.total || 0;
+      covers = [...covers, ...(coversData.data || [])];
+      offset += 100;
+    } while (covers.length < total);
 
     covers.sort((a, b) => {
-      const va = Number(
-        a.attributes.volume,
-      );
-
-      const vb = Number(
-        b.attributes.volume,
-      );
-
-      if (isNaN(va))
-        return 1;
-
-      if (isNaN(vb))
-        return -1;
-
+      const va = Number(a.attributes.volume);
+      const vb = Number(b.attributes.volume);
+      if (isNaN(va)) return 1;
+      if (isNaN(vb)) return -1;
       return va - vb;
     });
 
-    // =========================
-    // Obtener números únicos
-    // =========================
+    // ListadoManga
+    const listadoMangaId = await this.listadoMangaService.buscarColeccionPorTitulo(dto.titulo);
+    const listadoManga = listadoMangaId
+      ? await this.listadoMangaService.obtenerColeccion(listadoMangaId)
+      : null;
+    const tomosParseados = listadoManga?.tomos || [];
+    const numerosListado = tomosParseados.map((t) => t.numero);
 
-    const numerosUnicos =
-      Array.from(
-        new Set(
-          covers
-            .map((cover) => {
-              const volumenRaw =
-                cover.attributes
-                  ?.volume;
+    edicion.total_volumenes = numerosListado.length;
+    edicion.ultimo_tomo_publicado =
+      estado === 'FINISHED'
+        ? numerosListado.length
+        : numerosListado.filter((n) => {
+            const t = tomosParseados.find((t) => t.numero === n);
+            return t?.estado === 'publicado';
+          }).length;
+    await this.edicionRepo.save(edicion);
 
-              if (!volumenRaw)
-                return null;
-
-              const volumenTexto =
-  volumenRaw.toString();
-
-// ignorar variantes .1 .2 etc
-
-if (
-  volumenTexto.includes(
-    '.',
-  )
-) {
-  return null;
-}
-
-const numero =
-  parseInt(
-    volumenTexto,
-  );
-
-              return isNaN(
-                numero,
-              )
-                ? null
-                : numero;
-            })
-            .filter(
-              (
-                n,
-              ): n is number =>
-                n !== null,
-            ),
-        ),
-      ).sort(
-        (
-          a: number,
-          b: number,
-        ) => a - b,
-      );
-    
-
-    // =========================
-    // Actualizar / crear tomos
-    // =========================
-
-    const listadoMangaId =
-      await this.listadoMangaService.buscarColeccionPorTitulo(
-        dto.titulo,
-      );
-
-    console.log(
-      'LISTADOMANGA ID:',
-      listadoMangaId,
-    );
-
-    const listadoManga =
-      listadoMangaId
-        ? await this.listadoMangaService.obtenerColeccion(
-            listadoMangaId,
-          )
-        : null;
-
-    const tomosParseados =
-      listadoManga?.tomos || [];
-    
-    const numerosListado =
-      tomosParseados.map(
-        (t) => t.numero,
-      );
-    
-    // =========================
-    // Actualizar total
-    // =========================
-
-    edicion.total_volumenes =
-      numerosListado.length;
-
-    if (
-      estado ===
-      'FINISHED'
-    ) {
-      edicion.ultimo_tomo_publicado =
-        numerosListado.length;
-    } else {
-      edicion.ultimo_tomo_publicado =
-        numerosListado.filter(
-          (n) => {
-            const tomo =
-              tomosParseados.find(
-                (t) =>
-                  t.numero === n,
-              );
-
-            return (
-              tomo?.estado ===
-              'publicado'
-            );
-          },
-        ).length;
-    }
-
-    await this.edicionRepo.save(
-      edicion,
-    );  
-
+    // Volúmenes
     for (const numero of numerosListado) {
+      const tomoListado = tomosParseados.find((t) => t.numero === numero);
 
-      const tomoListado =
-        tomosParseados.find(
-          (t) =>
-            t.numero === numero,
-        );
-          const coversTomo =
-            covers.filter((c) => {
-              const volumenRaw =
-                c.attributes
-                  ?.volume;
+      const coversTomo = covers.filter((c) => {
+        const volumenRaw = c.attributes?.volume;
+        if (!volumenRaw) return false;
+        const numeroBase = parseInt(volumenRaw.toString().split('.')[0]);
+        return numeroBase === numero;
+      });
 
-              if (!volumenRaw) {
-                return false;
-              }
+      const portadaPrincipal =
+        coversTomo.find((c) => c.attributes.volume.toString() === numero.toString()) ||
+        coversTomo[0];
 
-              const texto =
-                volumenRaw.toString();
+      const portada = portadaPrincipal?.attributes?.fileName
+        ? `https://uploads.mangadex.org/covers/${dto.mangadex_id}/${portadaPrincipal.attributes.fileName}`
+        : dto.portada_url;
 
-              const numeroBase =
-                parseInt(
-                  texto.split('.')[0],
-                );
-
-              return (
-                numeroBase === numero
-              );
-            });
-
-          // portada principal
-          // solo la EXACTA del número
-
-          const portadaPrincipal =
-            coversTomo.find((c) => {
-              const texto =
-                c.attributes.volume.toString();
-
-              return (
-                texto ===
-                numero.toString()
-              );
-            }) || coversTomo[0];
-
-          let portada =
-            dto.portada_url;
-
-          if (
-            portadaPrincipal
-              ?.attributes
-              ?.fileName
-          ) {
-            portada = `https://uploads.mangadex.org/covers/${dto.mangadex_id}/${portadaPrincipal.attributes.fileName}`;
-          }
-
-          // alternativas
-          // variantes .1 .2 etc
-
-          const alternativas =
-            coversTomo
-              .filter((c) => {
-                const texto =
-                  c.attributes.volume.toString();
-
-                return (
-                  texto !==
-                  numero.toString()
-                );
-              })
-              .map((cover) => {
-                if (
-                  cover?.attributes
-                    ?.fileName
-                ) {
-                  return `https://uploads.mangadex.org/covers/${dto.mangadex_id}/${cover.attributes.fileName}`;
-                }
-
-                return null;
-              })
-              .filter(
-                (
-                  url,
-                ): url is string =>
-                  url !== null,
-              );
-
-          console.log(
-            'TOMO',
-            numero,
-            'ALT:',
-            alternativas.length,
-          );
-
-          // buscar existente
-
-          let volumen =
-            await this.volumenRepo.findOne(
-              {
-                where: {
-                  edicion_id:
-                    edicion.id,
-
-                  numero_tomo:
-                    numero,
-                },
-              },
-            );
-
-          // actualizar
-
-          if (volumen) {
-  volumen.portada_url =
-    portada;
-
-  volumen.portadas_alternativas =
-    alternativas;
-
-  volumen.fecha_publicacion =
-    tomoListado?.fecha
-      ? this.convertirFechaEspanol(
-          tomoListado.fecha,
+      const alternativas = coversTomo
+        .filter((c) => c.attributes.volume.toString() !== numero.toString())
+        .map((c) =>
+          c?.attributes?.fileName
+            ? `https://uploads.mangadex.org/covers/${dto.mangadex_id}/${c.attributes.fileName}`
+            : null,
         )
-      : undefined;
+        .filter((url): url is string => url !== null);
 
-  volumen.capitulos = [];
+      let volumen = await this.volumenRepo.findOne({
+        where: { edicion_id: edicion.id, numero_tomo: numero },
+      });
 
-  volumen.paginas =
-    tomoListado?.paginas ||
-    null;
+      const datosVolumen = {
+        portada_url: portada,
+        portadas_alternativas: alternativas,
+        fecha_publicacion: tomoListado?.fecha
+          ? this.convertirFechaEspanol(tomoListado.fecha)
+          : undefined,
+        capitulos: [],
+        paginas: tomoListado?.paginas || null,
+        precio: tomoListado?.precio || null,
+        estado_publicacion: tomoListado?.estado || 'desconocido',
+        ultima_actualizacion: new Date(),
+      };
 
-  volumen.precio =
-    tomoListado?.precio ||
-    null;
-
-  volumen.estado_publicacion =
-    tomoListado?.estado ||
-    'desconocido';
-
-  volumen.ultima_actualizacion =
-    new Date();
-
-
-  await this.volumenRepo.save(
-    volumen,
-  );
-
-  console.log(
-    'VOLUMEN ACTUALIZADO:',
-    volumen.numero_tomo,
-    volumen.fecha_publicacion,
-    volumen.capitulos,
-  );
-
-  continue;
-          }
-
-          // crear nuevo
-
-          await this.volumenRepo.save(
-            this.volumenRepo.create({
-              edicion_id:
-                edicion.id,
-
-              numero_tomo:
-                numero,
-
-              isbn: `${obra!.id}-${numero}`,
-
-              portada_url:
-                portada,
-
-              portadas_alternativas:
-                alternativas,
-                fecha_publicacion:
-                  tomoListado?.fecha
-                    ? this.convertirFechaEspanol(
-                        tomoListado.fecha,
-                      )
-                    : undefined,
-
-                capitulos: [],
-
-                paginas:
-                  tomoListado?.paginas ||
-                  null,
-
-                precio:
-                  tomoListado?.precio ||
-                  null,
-
-                estado_publicacion:
-                  tomoListado?.estado ||
-                  'desconocido',
-
-                ultima_actualizacion:
-                  new Date(),
-            }),
-          );
+      if (volumen) {
+        Object.assign(volumen, datosVolumen);
+        await this.volumenRepo.save(volumen);
+      } else {
+        await this.volumenRepo.save(
+          this.volumenRepo.create({
+            edicion_id: edicion.id,
+            numero_tomo: numero,
+            isbn: `${obra.id}-${numero}`,
+            ...datosVolumen,
+          }),
+        );
+      }
     }
+  }
 
-
-
-    return obra;
+  async buscarPorTitulo(q: string) {
+    const qLower = q.toLowerCase();
+    return this.obraRepo
+      .createQueryBuilder('obra')
+      .leftJoinAndSelect('obra.ediciones', 'edicion')
+      .where('LOWER(obra.titulo_es) LIKE :contains', { contains: `%${qLower}%` })
+      .orWhere('LOWER(obra.titulo_original) LIKE :contains', { contains: `%${qLower}%` })
+      // 1 = exacto | 2 = empieza por + corto primero | 3 = contiene
+      .orderBy(
+        `CASE
+          WHEN LOWER(obra.titulo_es) = :exact                THEN 1
+          WHEN LOWER(obra.titulo_es) LIKE :startsWith        THEN 2
+          ELSE 3
+        END`,
+        'ASC',
+      )
+      .addOrderBy('LENGTH(obra.titulo_es)', 'ASC')
+      .setParameters({ exact: qLower, startsWith: `${qLower}%` })
+      .limit(30)
+      .getMany();
   }
 
   async obtenerObras() {
@@ -638,6 +251,7 @@ const numero =
 
         relations: {
           obra: true,
+          volumenes: true,
         },
 
         order: {
@@ -691,9 +305,7 @@ const numero =
         total_volumenes:
           edicion.total_volumenes,
 
-        estado:
-          edicion.obra
-            ?.estado || null,
+        estado: edicion.obra?.estado || this.inferirEstadoDesdeVolumenes(edicion.volumenes ?? []),
 
         descripcion:
           edicion.obra
@@ -727,6 +339,15 @@ const numero =
       });
 
     return obra || null;
+  }
+
+  private inferirEstadoDesdeVolumenes(volumenes: any[]): string | null {
+    if (!volumenes.length) return null;
+    const hoy = new Date();
+    const tieneAbiertos = volumenes.some(
+      (v) => !v.fecha_publicacion || new Date(v.fecha_publicacion) > hoy,
+    );
+    return tieneAbiertos ? 'ongoing' : 'completed';
   }
 
   private convertirFechaEspanol(
