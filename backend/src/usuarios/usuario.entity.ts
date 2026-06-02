@@ -35,7 +35,7 @@ export class Usuario {
   password_hash: string;
 
   @Column({
-    length: 500,
+    type: 'text',
     nullable: true,
   })
   avatar_url: string;
@@ -47,7 +47,7 @@ export class Usuario {
   bio: string;
 
   @Column({
-    length: 500,
+    type: 'text',
     nullable: true,
   })
   expo_push_token: string;

@@ -36,7 +36,7 @@ export class Obra {
   titulo_es: string;
 
   @Column({
-    length: 500,
+    type: 'text'
     nullable: true,
   })
   titulo_original: string;
@@ -109,13 +109,13 @@ export class Obra {
   pais_origen: string;
 
   @Column({
-    length: 500,
+    type: 'text',
     nullable: true,
   })
   portada_url: string;
 
   @Column({
-    length: 500,
+    type: 'text',
     nullable: true,
   })
   bannerImage: string;

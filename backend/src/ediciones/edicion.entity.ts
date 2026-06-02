@@ -41,7 +41,7 @@ export class Edicion {
   @Column({ length: 300, nullable: true })
   nombre_edicion: string;
 
-  @Column({ length: 500, nullable: true })
+  @Column({ type: 'text', nullable: true })
   portada_url: string;
 
   @Column({ nullable: true })

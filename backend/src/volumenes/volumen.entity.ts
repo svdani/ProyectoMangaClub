@@ -91,7 +91,7 @@ export class Volumen {
   ultima_actualizacion: Date;
 
   @Column({
-    length: 500,
+    type: 'text',
     nullable: true,
   })
   portada_url: string;
